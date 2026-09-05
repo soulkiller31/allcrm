@@ -1,0 +1,32 @@
+# Dependencies - rebuilt inside container
+node_modules
+npm-debug.log*
+
+# Environment - mounted as volume or passed via env_file
+.env
+.env.local
+.env.*.local
+
+# WhatsApp session - mounted as volume
+.wwebjs_auth/
+.wwebjs_cache/
+.cache/
+
+# Build output
+frontend/dist/
+frontend/.vite/
+
+# Dev tools
+.git/
+.gitignore
+*.md
+.dbg/
+debug-*.md
+
+# Local configs
+.vscode/
+*.local
+
+# Logs
+logs/
+*.log

@@ -1,0 +1,38 @@
+{
+  "name": "salon-crm-backend",
+  "version": "1.0.0",
+  "description": "Salon CRM Backend API",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "seed": "node src/scripts/seedAdmin.js",
+    "migrate": "node src/scripts/runMigration.js",
+    "install:chrome": "node -e \"const { execSync } = require('child_process'); const { existsSync } = require('fs'); const cli = 'node_modules/puppeteer/lib/cjs/puppeteer/node/cli.js'; const cmd = existsSync(cli) ? ('node ' + cli + ' browsers install chrome-headless-shell') : 'npx -y puppeteer@24.38.0 browsers install chrome-headless-shell'; try { execSync(cmd, { stdio: 'inherit' }); } catch (error) { console.warn('chrome-headless-shell install skipped or failed:', error.message); }\""
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "bcryptjs": "^2.4.3",
+    "cashfree-pg": "^6.0.5",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "express-validator": "^7.2.1",
+    "firebase-admin": "^14.3.0",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "node-cron": "^3.0.3",
+    "pg": "^8.22.0",
+    "puppeteer": "^24.38.0",
+    "qrcode": "^1.5.4",
+    "whatsapp-web.js": "^1.26.0",
+    "ws": "^8.18.0",
+    "xlsx": "^0.18.5"
+  }
+}

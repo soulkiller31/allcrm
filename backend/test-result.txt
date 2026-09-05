@@ -1,0 +1,20 @@
+﻿=== Step 1: Signup ===
+Signup OK: true
+Tenant ID: 312f0739-42b8-4174-8d04-d273518672a9
+Sub plan: trial 3 days
+
+=== Step 2: Create Cashfree Order ===
+node : Create Order FAILED:
+At line:1 char:78
++ ... -main\CRM-software-main\backend" ; node test-payment.mjs *>&1 | Out-F ...
++                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Create Order FAILED::String) [],  
+   RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  Status: 500
+  Data: {
+  "success": false,
+  "message": "Request failed with status code 400",
+  "stack": "AxiosError: Request failed with status code 400\n    at settle (C:\\Users\\abc\\Pictures\\CRM-software-main\\CRM-software-main\\backend\\node_modules\\axios\\dist\\node\\axios.cjs:2530:12)\n    at IncomingMessage.handleStreamEnd (C:\\Users\\abc\\Pictures\\CRM-software-main\\CRM-software-main\\backend\\node_modules\\axios\\dist\\node\\axios.cjs:4772:11)\n    at C:\\Users\\abc\\Pictures\\CRM-software-main\\CRM-software-main\\backend\\node_modules\\@sentry\\core\\build\\cjs\\tracing\\bindScopeToEmitter.js:44:58\n    at C:\\Users\\abc\\Pictures\\CRM-software-main\\CRM-software-main\\backend\\node_modules\\@sentry\\opentelemetry\\build\\cjs\\asyncContextStrategy-volGaYqZ.js:1811:14\n    at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)\n    at SentryAsyncLocalStorageContextManager.with (C:\\Users\\abc\\Pictures\\CRM-software-main\\CRM-software-main\\backend\\node_modules\\@sentry\\opentelemetry\\build\\cjs\\index.js:23:36)\n    at ContextAPI.with (C:\\Users\\abc\\Pictures\\CRM-software-main\\CRM-software-main\\backend\\node_modules\\@opentelemetry\\api\\build\\src\\api\\context.js:51:46)\n    at Object.withSetScope (C:\\Users\\abc\\Pictures\\CRM-software-main\\CRM-software-main\\backend\\node_modules\\@sentry\\opentelemetry\\build\\cjs\\asyncContextStrategy-volGaYqZ.js:1810:28)\n    at Module.withScope (C:\\Users\\abc\\Pictures\\CRM-software-main\\CRM-software-main\\backend\\node_modules\\@sentry\\core\\build\\cjs\\currentScopes.js:39:16)\n    at IncomingMessage.<anonymous> (C:\\Users\\abc\\Pictures\\CRM-software-main\\CRM-software-main\\backend\\node_modules\\@sentry\\core\\build\\cjs\\tracing\\bindScopeToEmitter.js:44:26)\n    at IncomingMessage.emit (node:events:531:35)\n    at endReadableNT (node:internal/streams/readable:1698:12)\n    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)\n    at Axios.request (C:\\Users\\abc\\Pictures\\CRM-software-main\\CRM-software-main\\backend\\node_modules\\axios\\dist\\node\\axios.cjs:6308:43)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async file:///C:/Users/abc/Pictures/CRM-software-main/CRM-software-main/backend/src/controllers/paymentController.js:69:20"
+}

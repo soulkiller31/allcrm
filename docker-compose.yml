@@ -1,0 +1,91 @@
+# ============================================================
+# Salon CRM — Docker Compose
+# Production: docker compose --env-file backend/.env up -d
+# ============================================================
+
+version: '3.8'
+
+services:
+
+  # ── Backend (Node.js + Express + Puppeteer) ──────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: salon-crm-backend
+    restart: unless-stopped
+    env_file:
+      - /docker/crmsalon/backend/.env
+    environment:
+      - NODE_ENV=production
+      - WHATSAPP_SESSION_PATH=/app/.wwebjs_auth
+      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+    ports:
+      - "5000:5000"
+    volumes:
+      # Persist WhatsApp session across container restarts
+      - whatsapp_session:/app/.wwebjs_auth
+      # Persist logs
+      - /docker/crmsalon/logs/backend:/var/log/salon-crm
+    # Chrome needs these for headless on Linux
+    security_opt:
+      - seccomp:unconfined
+    shm_size: '256mb'
+    # Resource limits for 1CPU/4GB VPS
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - salon-network
+
+  # ── Frontend (React built + Nginx serving) ───────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=https://cutnculturesalon.cloud/api
+    container_name: salon-crm-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - salon-network
+
+  # ── Nginx Reverse Proxy (SSL termination) ────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: salon-crm-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /docker/crmsalon/nginx.docker.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /docker/crmsalon/logs/nginx:/var/log/nginx
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - salon-network
+
+volumes:
+  whatsapp_session:
+    driver: local
+
+networks:
+  salon-network:
+    driver: bridge

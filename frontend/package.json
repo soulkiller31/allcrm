@@ -1,0 +1,30 @@
+{
+  "name": "salon-crm-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node -r ./rollup-wasm.cjs node_modules/vite/bin/vite.js",
+    "build": "node -r ./rollup-wasm.cjs node_modules/vite/bin/vite.js build",
+    "preview": "node -r ./rollup-wasm.cjs node_modules/vite/bin/vite.js preview"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "firebase": "^12.18.0",
+    "lucide-react": "^0.469.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hot-toast": "^2.4.1",
+    "react-router-dom": "^7.1.1"
+  },
+  "devDependencies": {
+    "@rollup/wasm-node": "^4.62.3",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "vite": "^6.0.6"
+  }
+}
