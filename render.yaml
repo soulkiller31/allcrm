@@ -1,0 +1,60 @@
+services:
+  # Backend — Node.js API on Render
+  - type: web
+    name: salon-crm-backend
+    runtime: node
+    region: singapore          # closest to India
+    plan: free                 # change to starter ($7/mo) for always-on
+    rootDir: backend
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000            # Render assigns $PORT; 10000 is the default
+      # ── All secrets below must be set in Render Dashboard → Environment ──
+      # Render Dashboard: https://dashboard.render.com → your service → Environment
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: FRONTEND_URL
+        sync: false             # set to your Vercel URL e.g. https://allcrm.vercel.app
+      - key: BACKEND_URL
+        sync: false             # set to your Render URL e.g. https://salon-crm-backend.onrender.com
+      - key: CASHFREE_ENV
+        value: production
+      - key: CASHFREE_APP_ID
+        sync: false
+      - key: CASHFREE_SECRET_KEY
+        sync: false
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+      - key: SALON_NAME
+        value: Cut n Culture
+      - key: SALON_PHONE
+        value: "9358830044"
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_NAME
+        value: Salon Admin
+      - key: CRON_TIMEZONE
+        value: Asia/Kolkata
+      - key: AUTO_INIT_WHATSAPP
+        value: "false"
+      - key: WHATSAPP_RECONNECT_DELAY_MS
+        value: "30000"

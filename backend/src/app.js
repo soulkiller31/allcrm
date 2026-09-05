@@ -21,6 +21,8 @@ const isAllowedOrigin = (origin) => {
   if (!origin) return true;
   if (allowedOrigins.has(origin)) return true;
   if (origin.startsWith('http://localhost:')) return true;
+  // Allow all Vercel preview deployments for this project
+  if (origin.match(/^https:\/\/allcrm(-[a-z0-9]+)?\.vercel\.app$/)) return true;
   return false;
 };
 
