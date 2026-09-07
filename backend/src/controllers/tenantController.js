@@ -89,6 +89,17 @@ export const signup = asyncHandler(async (req, res) => {
   let signupMode = 'legacy';
 
   if (idToken && firebaseEnabled()) {
+    const isFirebaseToken = (() => {
+      try {
+        const header = JSON.parse(Buffer.from(idToken.split('.')[0], 'base64url').toString());
+        return header.alg === 'RS256';
+      } catch { return false; }
+    })();
+
+    if (!isFirebaseToken) {
+      throw new AppError('Invalid token format. Please sign in again.', 401);
+    }
+
     try {
       const decoded = await verifyIdToken(idToken);
       if (!decoded.email) throw new AppError('Firebase account has no email. Please use an email-based sign-in method.', 400);
@@ -153,6 +164,19 @@ export const login = asyncHandler(async (req, res) => {
   let loginMode = 'legacy';
 
   if (idToken && firebaseEnabled()) {
+    // Guard: only process as Firebase token if it has an RS256 header.
+    // A backend JWT (HS256) should never arrive here — reject it clearly.
+    const isFirebaseToken = (() => {
+      try {
+        const header = JSON.parse(Buffer.from(idToken.split('.')[0], 'base64url').toString());
+        return header.alg === 'RS256';
+      } catch { return false; }
+    })();
+
+    if (!isFirebaseToken) {
+      throw new AppError('Invalid token format. Please sign in again.', 401);
+    }
+
     try {
       const decoded = await verifyIdToken(idToken);
       if (!decoded.email && !decoded.uid) {

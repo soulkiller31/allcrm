@@ -81,8 +81,8 @@ export function AuthProvider({ children }) {
 
   useEffect(() => { verifyAuth(); }, [verifyAuth]);
 
-  // Keep Firebase ID token fresh in localStorage — but only when the stored
-  // token is already a Firebase RS256 token, never overwrite a backend JWT.
+  // Keep Firebase ID token fresh in localStorage — but ONLY when the stored
+  // token is a raw Firebase RS256 token. Never overwrite a backend HS256 JWT.
   useEffect(() => {
     if (!fbConfigured || !firebaseAuth) return;
     const unsub = onAuthStateChanged(firebaseAuth, async (user) => {
@@ -90,11 +90,22 @@ export function AuthProvider({ children }) {
       try {
         const existing = storedRaw('token');
         if (existing) {
-          const header = JSON.parse(atob(existing.split('.')[0].replace(/-/g, '+').replace(/_/g, '/')));
-          if (header.alg !== 'RS256') return; // backend HS256 JWT — leave it alone
+          // Safely decode the JWT header — if it fails, assume backend JWT and leave alone
+          let alg = 'HS256';
+          try {
+            const parts = existing.split('.');
+            if (parts.length === 3) {
+              const headerJson = atob(parts[0].replace(/-/g, '+').replace(/_/g, '/'));
+              alg = JSON.parse(headerJson).alg || 'HS256';
+            }
+          } catch (_) {
+            alg = 'HS256'; // parse failed — treat as backend JWT, don't overwrite
+          }
+          if (alg !== 'RS256') return; // backend JWT — leave it alone
         }
-        const token = await getIdToken(user, false);
-        localStorage.setItem('token', token);
+        // Only reaches here if no token stored OR existing token is RS256 (Firebase)
+        const freshToken = await getIdToken(user, false);
+        localStorage.setItem('token', freshToken);
       } catch (_) {}
     });
     return () => unsub();
