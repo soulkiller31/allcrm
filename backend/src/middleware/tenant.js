@@ -108,7 +108,9 @@ export const authenticateTenant = async (req, res, next) => {
       }
     })();
 
-    if (firebaseEnabled) {
+    if (firebaseEnabled && looksLikeFirebaseToken) {
+      // Only attempt Firebase verification if the token header is RS256.
+      // Backend JWTs (HS256) must never be sent to verifyIdToken.
       const fbResult = await authenticateWithFirebase(token);
       if (fbResult.type === 'ok') {
         admin = fbResult.admin;
@@ -120,14 +122,8 @@ export const authenticateTenant = async (req, res, next) => {
           403
         );
       } else if (fbResult.type === 'invalid') {
-        // If the token header says RS256 it was definitely sent as a Firebase
-        // token — surface the real error rather than silently falling through
-        // to the legacy JWT path (which would give a misleading "Invalid token").
-        if (looksLikeFirebaseToken) {
-          const reason = fbResult.error?.message || 'Firebase token verification failed';
-          throw new AppError(`Authentication failed: ${reason}`, 401);
-        }
-        // Otherwise it might be a legacy JWT — fall through to the JWT path below.
+        const reason = fbResult.error?.message || 'Firebase token verification failed';
+        throw new AppError(`Authentication failed: ${reason}`, 401);
       } else {
         throw fbResult.error || new AppError('Authentication failed.', 401);
       }
