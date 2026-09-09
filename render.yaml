@@ -9,6 +9,7 @@ services:
     buildCommand: npm ci
     startCommand: npm start
     healthCheckPath: /api/health
+    nodeVersion: 22.0.0
     envVars:
       - key: NODE_ENV
         value: production
