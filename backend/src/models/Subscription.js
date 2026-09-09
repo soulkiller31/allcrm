@@ -2,12 +2,10 @@ import supabase from '../config/supabase.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 export const PLANS = {
-  // ₹1 paid trial — 7 days full access, then pick a paid plan
-  trial_paid: { label: '7-Day Trial', price: 1, days: 7 },
-  // Paid plans (trial_paid users must upgrade to one of these after 7 days)
-  monthly:    { label: 'Monthly',  price: 2499,  days: 30  },
-  halfyearly: { label: '6 Months', price: 13999, days: 180 },
-  yearly:     { label: 'Yearly',   price: 26999, days: 365 },
+  trial:      { label: 'Free Trial', price: 0,     days: 3   },
+  monthly:    { label: 'Monthly',    price: 2499,  days: 30  },
+  halfyearly: { label: '6 Months',   price: 13999, days: 180 },
+  yearly:     { label: 'Yearly',     price: 26999, days: 365 },
 };
 
 export const SubscriptionModel = {
@@ -23,36 +21,14 @@ export const SubscriptionModel = {
     return data;
   },
 
-  // createPending — called on signup; user has no active subscription yet.
-  // They must pay ₹1 to start the 7-day trial before accessing the CRM.
-  async createPending(tenantId) {
+  // createTrial — called on signup, gives 3 days free access
+  async createTrial(tenantId) {
+    const trialEndsAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
     const { data, error } = await supabase.from('subscriptions').insert({
       tenant_id: tenantId,
-      plan: 'trial_paid',
-      status: 'pending',
-    }).select().single();
-    if (error) throw new AppError('Failed to create subscription record', 500);
-    return data;
-  },
-
-  // createTrial — activated after ₹1 payment succeeds
-  async createTrial(tenantId, { cashfreeOrderId, cashfreePaymentId } = {}) {
-    const trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-
-    // Cancel any existing subscriptions
-    await supabase.from('subscriptions')
-      .update({ status: 'cancelled' })
-      .eq('tenant_id', tenantId)
-      .neq('status', 'cancelled');
-
-    const { data, error } = await supabase.from('subscriptions').insert({
-      tenant_id: tenantId,
-      plan: 'trial_paid',
+      plan: 'trial',
       status: 'trial',
       trial_ends_at: trialEndsAt,
-      cashfree_order_id: cashfreeOrderId || null,
-      cashfree_payment_id: cashfreePaymentId || null,
-      amount_paid: 1,
     }).select().single();
     if (error) throw new AppError('Failed to create trial', 500);
     return data;
@@ -97,7 +73,7 @@ export const SubscriptionModel = {
       .from('subscriptions')
       .select('*')
       .eq('cashfree_order_id', orderId)
-      .in('status', ['active', 'trial'])
+      .eq('status', 'active')
       .maybeSingle();
     if (error) throw new AppError('Database error', 500);
     return data;

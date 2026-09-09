@@ -134,16 +134,15 @@ export const signup = asyncHandler(async (req, res) => {
     firebaseUid: resolvedFirebaseUid,
   });
 
-  // Create a pending subscription — user must pay ₹1 to activate the 7-day trial.
-  // No free trial is granted automatically on signup.
-  const subscription = await SubscriptionModel.createPending(tenant.id);
+  // Create free 3-day trial on signup
+  const subscription = await SubscriptionModel.createTrial(tenant.id);
   await seedDefaultsForTenant(tenant, businessType);
 
   const legacyToken = signToken(admin, tenant);
 
   res.status(201).json({
     success: true,
-    message: 'Account created. Pay ₹1 to start your 7-day free trial.',
+    message: 'Account created. Your 3-day free trial has started.',
     data: {
       token: legacyToken,
       authMode: signupMode,
@@ -270,7 +269,7 @@ export const login = asyncHandler(async (req, res) => {
               ownerEmail: normalizedEmail,
               ownerName: config.admin.name || 'Admin',
             });
-            try { await SubscriptionModel.createPending(tenant.id); } catch (_) {}
+            try { await SubscriptionModel.createTrial(tenant.id); } catch (_) {}
           } catch (_) {
             tenant = { id: 'dev-fallback-tenant', name: config.salonName || 'Dev', business_type: 'general', owner_email: normalizedEmail, owner_name: config.admin.name || 'Admin', is_active: true };
           }

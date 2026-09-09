@@ -239,8 +239,7 @@ export function AuthProvider({ children }) {
     if (!subscription) return false;
     const now = new Date();
     if (subscription.status === 'trial') return subscription.trialEndsAt && new Date(subscription.trialEndsAt) > now;
-    if (subscription.status === 'active') return subscription.paidUntil  && new Date(subscription.paidUntil)  > now;
-    // 'pending' and any other status = not active
+    if (subscription.status === 'active') return subscription.paidUntil && new Date(subscription.paidUntil) > now;
     return false;
   };
 

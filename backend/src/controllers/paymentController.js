@@ -38,22 +38,12 @@ const activateFromPayment = async (payment, { paymentId, amount } = {}) => {
   const already = await SubscriptionModel.isAlreadyActivatedForOrder(payment.cashfree_order_id);
   if (already) return already;
 
-  let subscription;
-
-  if (payment.plan === 'trial_paid') {
-    // ₹1 trial payment — start 7-day trial, not a regular paid subscription
-    subscription = await SubscriptionModel.createTrial(payment.tenant_id, {
-      cashfreeOrderId: payment.cashfree_order_id,
-      cashfreePaymentId: paymentId || payment.cashfree_payment_id,
-    });
-  } else {
-    subscription = await SubscriptionModel.activate(payment.tenant_id, {
-      plan: payment.plan,
-      cashfreeOrderId: payment.cashfree_order_id,
-      cashfreePaymentId: paymentId || payment.cashfree_payment_id,
-      amountPaid: amount || payment.amount,
-    });
-  }
+  const subscription = await SubscriptionModel.activate(payment.tenant_id, {
+    plan: payment.plan,
+    cashfreeOrderId: payment.cashfree_order_id,
+    cashfreePaymentId: paymentId || payment.cashfree_payment_id,
+    amountPaid: amount || payment.amount,
+  });
 
   await PaymentModel.markPaid(payment.cashfree_order_id, {
     paymentId: paymentId || payment.cashfree_payment_id,
@@ -66,24 +56,9 @@ export const createOrder = asyncHandler(async (req, res) => {
   const { plan } = req.body;
   const tenant = req.tenant;
 
-  // Validate plan — block unknown plans and the legacy free 'trial'
+  // Validate plan — block unknown plans and the free trial plan
   if (!PLANS[plan] || plan === 'trial') {
-    throw new AppError('Invalid plan. Choose trial_paid, monthly, halfyearly, or yearly.', 400);
-  }
-
-  // Prevent using ₹1 trial twice — check if tenant already had a trial
-  if (plan === 'trial_paid') {
-    const { default: supabase } = await import('../config/supabase.js');
-    const { data: existingTrial } = await supabase
-      .from('subscriptions')
-      .select('id')
-      .eq('tenant_id', tenant.id)
-      .in('plan', ['trial_paid'])
-      .in('status', ['trial', 'active', 'cancelled'])
-      .maybeSingle();
-    if (existingTrial) {
-      throw new AppError('You have already used the ₹1 trial. Please choose a paid plan to continue.', 400);
-    }
+    throw new AppError('Invalid plan. Choose monthly, halfyearly, or yearly.', 400);
   }
 
   const planInfo = PLANS[plan];
@@ -189,9 +164,7 @@ export const verifyPayment = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    message: subscription.plan === 'trial_paid'
-      ? '7-day trial activated! Explore all features.'
-      : `${PLANS[subscription.plan]?.label || plan || 'Paid'} subscription activated!`,
+    message: `${PLANS[subscription.plan]?.label || plan || 'Paid'} subscription activated!`,
     data: {
       subscription: {
         plan: subscription.plan,
@@ -256,7 +229,7 @@ export const getPlans = asyncHandler(async (_req, res) => {
   res.json({
     success: true,
     data: Object.entries(PLANS)
-      .filter(([key]) => key !== 'trial') // exclude legacy free trial key
+      .filter(([key]) => key !== 'trial')
       .map(([key, val]) => ({ key, ...val })),
   });
 });
