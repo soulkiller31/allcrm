@@ -2,7 +2,7 @@ import { InvoiceModel } from '../models/Invoice.js';
 import { CustomerModel } from '../models/Customer.js';
 import { MessageLogModel } from '../models/MessageLog.js';
 import { SettingsModel } from '../models/WhatsApp.js';
-import whatsappService from '../services/whatsappService.js';
+import { getWhatsAppService } from '../services/whatsappService.js';
 import { generateInvoicePdf } from '../services/invoicePdfService.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
 import { requireTenantId, brandingFromTenant } from '../utils/tenant.js';
@@ -204,7 +204,8 @@ export const saveCustomerAndSendWhatsApp = asyncHandler(async (req, res) => {
   let whatsappResult = null;
 
   if (send_whatsapp) {
-    if (!whatsappService.getStatus().isConnected) {
+    const svc = getWhatsAppService(tenantId);
+    if (!svc.getStatus().isConnected) {
       throw new AppError('Customer and invoice saved, but WhatsApp is not connected', 400);
     }
 
@@ -232,7 +233,7 @@ export const saveCustomerAndSendWhatsApp = asyncHandler(async (req, res) => {
     const filename = `Invoice-${invoiceNo}.pdf`;
 
     try {
-      await whatsappService.sendDocument(customer.phone, tmpPdfPath, filename, caption);
+      await svc.sendDocument(customer.phone, tmpPdfPath, filename, caption);
       console.log('[Invoice] PDF sent to', customer.phone);
 
       await MessageLogModel.create({
@@ -298,7 +299,8 @@ export const resendInvoicePdf = asyncHandler(async (req, res) => {
   const phone = (req.body.phone || invoice.customer_phone || '').trim();
   if (!phone) throw new AppError('Phone number is required', 400);
 
-  if (!whatsappService.getStatus().isConnected) {
+  const svcResend = getWhatsAppService(tenantId);
+  if (!svcResend.getStatus().isConnected) {
     throw new AppError('WhatsApp is not connected', 400);
   }
 
@@ -312,7 +314,7 @@ export const resendInvoicePdf = asyncHandler(async (req, res) => {
   const filename = `Invoice-${invoiceNo}.pdf`;
 
   try {
-    await whatsappService.sendDocument(phone, tmpPdfPath, filename, caption);
+    await svcResend.sendDocument(phone, tmpPdfPath, filename, caption);
 
     await MessageLogModel.create({
       tenant_id: tenantId,

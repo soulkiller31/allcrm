@@ -2,7 +2,6 @@ import app from './app.js';
 import config from './config/index.js';
 import { startCronJobs } from './cron/scheduler.js';
 import { seedAdmin } from './scripts/seedAdmin.js';
-import whatsappService from './services/whatsappService.js';
 
 const PORT = config.port;
 
@@ -22,11 +21,7 @@ const server = app.listen(PORT, async () => {
   }
 
   if (config.autoInitWhatsApp) {
-    try {
-      await whatsappService.initialize();
-    } catch (err) {
-      console.error('[WhatsApp] Auto-init failed:', err.message);
-    }
+    console.log('[WhatsApp] AUTO_INIT_WHATSAPP is enabled but ignored — each tenant initializes their own WhatsApp session on demand.');
   }
 });
 

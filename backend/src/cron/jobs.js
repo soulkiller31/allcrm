@@ -3,7 +3,7 @@ import { TemplateModel } from '../models/Template.js';
 import { MessageLogModel } from '../models/MessageLog.js';
 import { SettingsModel } from '../models/WhatsApp.js';
 import { SubscriptionModel } from '../models/Subscription.js';
-import whatsappService from '../services/whatsappService.js';
+import { getWhatsAppService } from '../services/whatsappService.js';
 import { interpolateTemplate } from '../services/messageService.js';
 import { TenantModel } from '../models/Tenant.js';
 
@@ -64,10 +64,11 @@ const sendBulkMessages = async (customers, type, options = {}) => {
     }
 
     const message = interpolateTemplate(template.content, customer, salonName);
+    const svc = getWhatsAppService(tenantId);
 
     try {
-      if (whatsappService.getStatus().isConnected) {
-        await whatsappService.sendMessage(customer.phone, message);
+      if (svc.getStatus().isConnected) {
+        await svc.sendMessage(customer.phone, message);
         await MessageLogModel.create({
           tenant_id: tenantId,
           customer_id: customer.id,

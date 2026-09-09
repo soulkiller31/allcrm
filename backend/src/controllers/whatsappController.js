@@ -1,4 +1,4 @@
-import whatsappService from '../services/whatsappService.js';
+import { getWhatsAppService } from '../services/whatsappService.js';
 import { WhatsAppModel } from '../models/WhatsApp.js';
 import { CustomerModel } from '../models/Customer.js';
 import { TemplateModel } from '../models/Template.js';
@@ -10,65 +10,70 @@ import { restartCronJobs } from '../cron/scheduler.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
 
 export const getWhatsAppStatus = asyncHandler(async (req, res) => {
-  const status = whatsappService.getStatus();
+  const tenantId = requireTenantId(req);
+  const svc = getWhatsAppService(tenantId);
+  const status = svc.getStatus();
   let session = null;
   let dbError = null;
 
   try {
-    session = await WhatsAppModel.getSession(req.tenant?.id);
+    session = await WhatsAppModel.getSession(tenantId);
   } catch (err) {
     dbError = (err && err.message) || 'Failed to fetch WhatsApp session';
   }
 
   res.json({
     success: true,
-    data: {
-      ...status,
-      dbSession: session,
-      dbError,
-    },
+    data: { ...status, dbSession: session, dbError },
   });
 });
 
-export const initializeWhatsApp = asyncHandler(async (_req, res) => {
-  await whatsappService.initialize();
+export const initializeWhatsApp = asyncHandler(async (req, res) => {
+  const tenantId = requireTenantId(req);
+  const svc = getWhatsAppService(tenantId);
+  await svc.initialize();
 
   res.json({
     success: true,
     message: 'WhatsApp initialization started. Scan QR code when ready.',
-    data: whatsappService.getStatus(),
+    data: svc.getStatus(),
   });
 });
 
-export const logoutWhatsApp = asyncHandler(async (_req, res) => {
-  await whatsappService.logout();
+export const logoutWhatsApp = asyncHandler(async (req, res) => {
+  const tenantId = requireTenantId(req);
+  const svc = getWhatsAppService(tenantId);
+  await svc.logout();
 
   res.json({
     success: true,
     message: 'WhatsApp logged out successfully',
-    data: whatsappService.getStatus(),
+    data: { status: 'disconnected', isConnected: false },
   });
 });
 
-export const restartWhatsApp = asyncHandler(async (_req, res) => {
-  await whatsappService.restart();
+export const restartWhatsApp = asyncHandler(async (req, res) => {
+  const tenantId = requireTenantId(req);
+  const svc = getWhatsAppService(tenantId);
+  await svc.restart();
 
   res.json({
     success: true,
     message: 'WhatsApp restart initiated',
-    data: whatsappService.getStatus(),
+    data: svc.getStatus(),
   });
 });
 
 export const sendTestMessage = asyncHandler(async (req, res) => {
   const { phone, message } = req.body;
+  const tenantId = requireTenantId(req);
+  const svc = getWhatsAppService(tenantId);
 
-  if (!whatsappService.getStatus().isConnected) {
+  if (!svc.getStatus().isConnected) {
     throw new AppError('WhatsApp is not connected', 400);
   }
 
-  const tenantId = requireTenantId(req);
-  await whatsappService.sendMessage(phone, message);
+  await svc.sendMessage(phone, message);
 
   await MessageLogModel.create({
     tenant_id: tenantId,
@@ -83,12 +88,13 @@ export const sendTestMessage = asyncHandler(async (req, res) => {
 
 export const sendManualMessage = asyncHandler(async (req, res) => {
   const { customer_id, template_id } = req.body;
+  const tenantId = requireTenantId(req);
+  const svc = getWhatsAppService(tenantId);
 
-  if (!whatsappService.getStatus().isConnected) {
+  if (!svc.getStatus().isConnected) {
     throw new AppError('WhatsApp is not connected', 400);
   }
 
-  const tenantId = requireTenantId(req);
   const customer = await CustomerModel.findById(customer_id, tenantId);
   const template = await TemplateModel.findById(template_id, tenantId);
   const branding = brandingFromTenant(req.tenant);
@@ -98,7 +104,7 @@ export const sendManualMessage = asyncHandler(async (req, res) => {
   const message = interpolateTemplate(template.content, customer, salonName);
 
   try {
-    await whatsappService.sendMessage(customer.phone, message);
+    await svc.sendMessage(customer.phone, message);
     const log = await MessageLogModel.create({
       tenant_id: tenantId,
       customer_id: customer.id,
@@ -108,10 +114,9 @@ export const sendManualMessage = asyncHandler(async (req, res) => {
       type: template.type,
       status: 'sent',
     });
-
     res.json({ success: true, message: 'Message sent', data: log });
   } catch (err) {
-    const log = await MessageLogModel.create({
+    await MessageLogModel.create({
       tenant_id: tenantId,
       customer_id: customer.id,
       template_id: template.id,
@@ -121,7 +126,6 @@ export const sendManualMessage = asyncHandler(async (req, res) => {
       status: 'failed',
       error_message: err.message,
     });
-
     throw new AppError(`Failed to send message: ${err.message}`, 500);
   }
 });
@@ -131,29 +135,26 @@ export const getSettings = asyncHandler(async (req, res) => {
   const settings = await SettingsModel.getAll(tenantId);
   const formatted = {};
   settings.forEach((s) => { formatted[s.key] = s.value; });
-
   res.json({ success: true, data: formatted });
 });
 
 export const updateSettings = asyncHandler(async (req, res) => {
   const tenantId = requireTenantId(req);
   const updates = req.body;
-
   for (const [key, value] of Object.entries(updates)) {
     await SettingsModel.set(key, value, tenantId);
   }
-
   await restartCronJobs();
-
   res.json({ success: true, message: 'Settings updated' });
 });
 
 export const getDashboardStats = asyncHandler(async (req, res) => {
   const tenantId = requireTenantId(req);
-  const [customerStats, messageStats, whatsappStatus] = await Promise.all([
+  const svc = getWhatsAppService(tenantId);
+
+  const [customerStats, messageStats] = await Promise.all([
     CustomerModel.getStats(tenantId),
     MessageLogModel.getStats(tenantId),
-    Promise.resolve(whatsappService.getStatus()),
   ]);
 
   res.json({
@@ -161,7 +162,7 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     data: {
       customers: customerStats,
       messages: messageStats,
-      whatsapp: whatsappStatus,
+      whatsapp: svc.getStatus(),
     },
   });
 });
@@ -179,9 +180,7 @@ export const triggerCronJob = asyncHandler(async (req, res) => {
     follow_up_male: CronJobs.sendMaleFollowUpMessages,
   };
 
-  if (!jobs[job]) {
-    throw new AppError('Invalid cron job type', 400);
-  }
+  if (!jobs[job]) throw new AppError('Invalid cron job type', 400);
 
   const result = await jobs[job]();
   res.json({ success: true, message: `${job} job executed`, data: result });
