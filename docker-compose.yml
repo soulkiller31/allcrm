@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  salon-crm-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: salon-crm-backend
+    restart: unless-stopped
+    ports:
+      - "5001:5000"        # host 5001 → container 5000 (avoids conflict with existing app)
+    volumes:
+      - whatsapp_sessions:/app/.wwebjs_auth   # persist WhatsApp sessions across restarts
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - BACKEND_URL=${BACKEND_URL}
+      - SALON_NAME=${SALON_NAME}
+      - SALON_PHONE=${SALON_PHONE}
+      - SALON_ADDRESS=${SALON_ADDRESS}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - ADMIN_NAME=${ADMIN_NAME}
+      - CASHFREE_ENV=${CASHFREE_ENV}
+      - CASHFREE_APP_ID=${CASHFREE_APP_ID}
+      - CASHFREE_SECRET_KEY=${CASHFREE_SECRET_KEY}
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+      - FIREBASE_CLIENT_EMAIL=${FIREBASE_CLIENT_EMAIL}
+      - FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY}
+      - CRON_TIMEZONE=${CRON_TIMEZONE}
+      - AUTO_INIT_WHATSAPP=false
+      - WHATSAPP_SESSION_PATH=/app/.wwebjs_auth
+      - WHATSAPP_RECONNECT_DELAY_MS=${WHATSAPP_RECONNECT_DELAY_MS}
+      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+      - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+    shm_size: '256mb'      # shared memory for Chrome — critical for stability
+    cap_add:
+      - SYS_ADMIN           # needed for Chrome sandbox in Docker
+
+volumes:
+  whatsapp_sessions:
+    driver: local
