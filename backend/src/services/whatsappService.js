@@ -429,12 +429,24 @@ class WhatsAppService {
         // sent successfully, the error is a library-side getter issue. Treat as success.
         if (msg.includes('id property') || msg.includes('memoize') || /getter.*id/i.test(msg)) {
           console.warn(`[WhatsApp][${this.tenantId}] Message sent (ignoring library memoize bug):`, msg.split('\n')[0]);
-          return { sent: true, chatId }; // message was delivered
+          return { sent: true, chatId };
+        }
+
+        // Detached Frame — browser page crashed, need to reconnect
+        if (msg.includes('detached') || msg.includes('Detached') || msg.includes('Frame')) {
+          console.warn(`[WhatsApp][${this.tenantId}] Detached frame detected — reconnecting...`);
+          this.status = 'disconnected';
+          this.client = null;
+          this.initializing = false;
+          // Schedule reconnect and throw so caller knows to retry later
+          this.scheduleReconnect('detached_frame');
+          throw new Error('WhatsApp disconnected due to a browser issue. Please wait 30 seconds and try again — it will reconnect automatically.');
         }
 
         if (msg.includes('not a valid') || msg.includes('not exist') || msg.includes('404') || msg.includes('Wid') || msg.includes('unregistered') || msg.includes('not on WhatsApp')) {
           throw new Error(`Phone +${normalized} is not on WhatsApp. Ask customer to install WhatsApp first.`);
         }
+
         if (attempt < 3 && (msg.includes('No LID') || msg.includes('undefined') || /getter/i.test(msg))) {
           console.warn(`[WhatsApp][${this.tenantId}] sendMessage attempt ${attempt} retrying:`, msg.split('\n')[0]);
           chatId = fallbackChatId;
@@ -481,12 +493,23 @@ class WhatsAppService {
       } catch (err) {
         lastErr = err;
         const msg = (err && err.message) || String(err);
+        const isDetached = msg.includes('detached') || msg.includes('Detached') || msg.includes('Frame');
         const retryable =
+          !isDetached && (
           msg.includes('id property') ||
           msg.includes('memoize') ||
           msg.includes('No LID') ||
           (msg.includes('undefined') && /getter/i.test(msg)) ||
-          /getter must include/i.test(msg);
+          /getter must include/i.test(msg));
+
+        if (isDetached) {
+          console.warn(`[WhatsApp][${this.tenantId}] Detached frame on sendDocument — reconnecting...`);
+          this.status = 'disconnected';
+          this.client = null;
+          this.initializing = false;
+          this.scheduleReconnect('detached_frame');
+          throw new Error('WhatsApp disconnected due to a browser issue. Please wait 30 seconds and try again — it will reconnect automatically.');
+        }
         if (attempt < 3 && retryable) {
           console.warn(`[WhatsApp][${this.tenantId}] sendDocument attempt ${attempt} hit library bug, retrying with raw chatId...:`, msg.split('\n')[0]);
           try {
