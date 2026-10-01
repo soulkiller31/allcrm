@@ -45,12 +45,14 @@ export const startCronJobs = async () => {
   const anniversaryCron = await getCronSetting('anniversary_cron', '0 9 * * *');
   const monthlyOfferCron = await getCronSetting('monthly_offer_cron', '0 10 1 * *');
   const followUpCron = await getCronSetting('follow_up_cron', '0 10 * * *');
+  const pendingInvoiceCron = await getCronSetting('pending_invoice_cron', '*/15 * * * *');
 
   scheduledTasks = [
     cron.schedule(birthdayCron, wrapScheduledJob('birthday', CronJobs.sendBirthdayMessages), { timezone }),
     cron.schedule(anniversaryCron, wrapScheduledJob('anniversary', CronJobs.sendAnniversaryMessages), { timezone }),
     cron.schedule(monthlyOfferCron, wrapScheduledJob('monthly_offer', CronJobs.sendMonthlyOffers), { timezone }),
     cron.schedule(followUpCron, wrapScheduledJob('follow_up', CronJobs.sendFollowUpMessages), { timezone }),
+    cron.schedule(pendingInvoiceCron, wrapScheduledJob('pending_invoice', CronJobs.sendPendingInvoices), { timezone }),
   ];
 
   console.log('[Cron] Scheduled jobs started');
@@ -58,6 +60,7 @@ export const startCronJobs = async () => {
   console.log(`  Anniversary: ${anniversaryCron}`);
   console.log(`  Monthly Offer: ${monthlyOfferCron}`);
   console.log(`  Follow-up: ${followUpCron}`);
+  console.log(`  Pending Invoice Retry: ${pendingInvoiceCron}`);
   console.log(`  Timezone: ${timezone}`);
 };
 

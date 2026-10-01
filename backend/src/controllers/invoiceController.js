@@ -109,7 +109,8 @@ const resolveBranding = async (req) => {
   const address = await SettingsModel.getString('salon_address', fallback.address, tenantId);
   const phone = await SettingsModel.getString('salon_phone', fallback.phone, tenantId);
   const gstin = await SettingsModel.getString('salon_gstin', fallback.gstin, tenantId);
-  return { tenantId, name, address, phone, gstin };
+  const logoUrl = await SettingsModel.getString('salon_logo', fallback.logoUrl, tenantId);
+  return { tenantId, name, address, phone, gstin, logoUrl };
 };
 
 export const getNextInvoiceNumber = asyncHandler(async (req, res) => {
@@ -205,8 +206,35 @@ export const saveCustomerAndSendWhatsApp = asyncHandler(async (req, res) => {
 
   if (send_whatsapp) {
     const svc = getWhatsAppService(tenantId);
+    await svc.initialize();
+    const statusBefore = svc.getStatus();
+    if (!statusBefore.isConnected) {
+      let waited = 0;
+      const pollEvery = 500;
+      const pollTimeout = 10000;
+      while (!svc.getStatus().isConnected && waited < pollTimeout) {
+        await new Promise((r) => setTimeout(r, pollEvery));
+        waited += pollEvery;
+      }
+    }
     if (!svc.getStatus().isConnected) {
-      throw new AppError('Customer and invoice saved, but WhatsApp is not connected', 400);
+      const st = svc.getStatus();
+      const detail = st.status === 'qr_ready'
+        ? 'WhatsApp QR not scanned yet. Invoice saved — will auto-send when WhatsApp connects.'
+        : st.status === 'initializing'
+          ? 'WhatsApp still connecting. Invoice saved — will auto-send when ready.'
+          : `WhatsApp not connected (${st.status}). Invoice saved — will auto-send when WhatsApp is back online.`;
+      res.status(201).json({
+        success: true,
+        message: detail,
+        data: {
+          customer,
+          invoice,
+          next_invoice_number: await InvoiceModel.getNextNumber(tenantId),
+          whatsapp: { sent: false, deferred: true, status: st.status },
+        },
+      });
+      return;
     }
 
     const branding = await resolveBranding(req);
@@ -300,8 +328,17 @@ export const resendInvoicePdf = asyncHandler(async (req, res) => {
   if (!phone) throw new AppError('Phone number is required', 400);
 
   const svcResend = getWhatsAppService(tenantId);
+  await svcResend.initialize();
   if (!svcResend.getStatus().isConnected) {
-    throw new AppError('WhatsApp is not connected', 400);
+    let waited = 0;
+    while (!svcResend.getStatus().isConnected && waited < 8000) {
+      await new Promise((r) => setTimeout(r, 500));
+      waited += 500;
+    }
+  }
+  if (!svcResend.getStatus().isConnected) {
+    const st = svcResend.getStatus();
+    throw new AppError(`WhatsApp not connected (${st.status}). Please open the WhatsApp page and scan QR first.`, 400);
   }
 
   const branding = await resolveBranding(req);

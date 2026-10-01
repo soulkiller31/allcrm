@@ -68,9 +68,18 @@ export const sendTestMessage = asyncHandler(async (req, res) => {
   const { phone, message } = req.body;
   const tenantId = requireTenantId(req);
   const svc = getWhatsAppService(tenantId);
+  await svc.initialize();
+  if (!svc.getStatus().isConnected) {
+    let waited = 0;
+    while (!svc.getStatus().isConnected && waited < 10000) {
+      await new Promise((r) => setTimeout(r, 500));
+      waited += 500;
+    }
+  }
 
   if (!svc.getStatus().isConnected) {
-    throw new AppError('WhatsApp is not connected', 400);
+    const st = svc.getStatus();
+    throw new AppError(`WhatsApp not connected (${st.status}). Scan QR on the WhatsApp page first.`, 400);
   }
 
   await svc.sendMessage(phone, message);
@@ -90,9 +99,18 @@ export const sendManualMessage = asyncHandler(async (req, res) => {
   const { customer_id, template_id } = req.body;
   const tenantId = requireTenantId(req);
   const svc = getWhatsAppService(tenantId);
+  await svc.initialize();
+  if (!svc.getStatus().isConnected) {
+    let waited = 0;
+    while (!svc.getStatus().isConnected && waited < 10000) {
+      await new Promise((r) => setTimeout(r, 500));
+      waited += 500;
+    }
+  }
 
   if (!svc.getStatus().isConnected) {
-    throw new AppError('WhatsApp is not connected', 400);
+    const st = svc.getStatus();
+    throw new AppError(`WhatsApp not connected (${st.status}). Scan QR on the WhatsApp page first.`, 400);
   }
 
   const customer = await CustomerModel.findById(customer_id, tenantId);
@@ -178,6 +196,7 @@ export const triggerCronJob = asyncHandler(async (req, res) => {
     follow_up: CronJobs.sendFollowUpMessages,
     follow_up_female: CronJobs.sendFemaleFollowUpMessages,
     follow_up_male: CronJobs.sendMaleFollowUpMessages,
+    pending_invoice: CronJobs.sendPendingInvoices,
   };
 
   if (!jobs[job]) throw new AppError('Invalid cron job type', 400);

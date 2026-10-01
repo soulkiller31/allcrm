@@ -5,14 +5,12 @@ import { ThemeProvider, useTheme } from './context/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Login from './pages/Login';
-import Onboarding from './pages/Onboarding';
 import Dashboard from './pages/Dashboard';
 import Customers from './pages/Customers';
 import WhatsApp from './pages/WhatsApp';
 import Templates from './pages/Templates';
 import MessageLogs from './pages/MessageLogs';
 import Invoice from './pages/Invoice';
-import Billing from './pages/Billing';
 import Services from './pages/Services';
 import Settings from './pages/Settings';
 
@@ -28,8 +26,8 @@ function ThemedToaster() {
   return <Toaster position="top-right" toastOptions={toastStyle} />;
 }
 
-const Page = ({ children, requireSub = true }) => (
-  <ProtectedRoute requireSub={requireSub}>
+const Page = ({ children }) => (
+  <ProtectedRoute>
     <Layout>{children}</Layout>
   </ProtectedRoute>
 );
@@ -40,12 +38,6 @@ function AppInner() {
       <ThemedToaster />
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/onboarding" element={
-          <ProtectedRoute requireSub={false}><Onboarding /></ProtectedRoute>
-        } />
-        <Route path="/billing" element={
-          <ProtectedRoute requireSub={false}><Layout><Billing /></Layout></ProtectedRoute>
-        } />
         <Route path="/" element={<Page><Dashboard /></Page>} />
         <Route path="/customers" element={<Page><Customers /></Page>} />
         <Route path="/invoice" element={<Page><Invoice /></Page>} />
@@ -53,7 +45,7 @@ function AppInner() {
         <Route path="/whatsapp" element={<Page><WhatsApp /></Page>} />
         <Route path="/templates" element={<Page><Templates /></Page>} />
         <Route path="/message-logs" element={<Page><MessageLogs /></Page>} />
-        <Route path="/settings" element={<Page requireSub={false}><Settings /></Page>} />
+        <Route path="/settings" element={<Page><Settings /></Page>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>

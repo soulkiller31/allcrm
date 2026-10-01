@@ -3,9 +3,14 @@ import { TemplateModel } from '../models/Template.js';
 import { MessageLogModel } from '../models/MessageLog.js';
 import { SettingsModel } from '../models/WhatsApp.js';
 import { SubscriptionModel } from '../models/Subscription.js';
+import { InvoiceModel } from '../models/Invoice.js';
 import { getWhatsAppService } from '../services/whatsappService.js';
 import { interpolateTemplate } from '../services/messageService.js';
 import { TenantModel } from '../models/Tenant.js';
+import { generateInvoicePdf } from '../services/invoicePdfService.js';
+import os from 'os';
+import path from 'path';
+import fs from 'fs';
 
 const FOLLOW_UP_RULES = {
   female: {
@@ -57,6 +62,16 @@ const sendBulkMessages = async (customers, type, options = {}) => {
   let failed = 0;
   let skipped = 0;
 
+  const svcTenant = getWhatsAppService(tenantId);
+  await svcTenant.initialize();
+  if (!svcTenant.getStatus().isConnected) {
+    let waited = 0;
+    while (!svcTenant.getStatus().isConnected && waited < 15000) {
+      await new Promise((r) => setTimeout(r, 500));
+      waited += 500;
+    }
+  }
+
   for (const customer of customers) {
     if (await shouldSkipCustomer(customer, type, options.skipWindowDays, tenantId)) {
       skipped++;
@@ -64,7 +79,7 @@ const sendBulkMessages = async (customers, type, options = {}) => {
     }
 
     const message = interpolateTemplate(template.content, customer, salonName);
-    const svc = getWhatsAppService(tenantId);
+    const svc = svcTenant;
 
     try {
       if (svc.getStatus().isConnected) {
@@ -192,6 +207,90 @@ export const CronJobs = {
         templateTypes: rule.templateTypes,
         skipWindowDays: rule.minDaysSinceVisit,
       });
+    });
+  },
+
+  async sendPendingInvoices() {
+    console.log('[Cron] Running pending invoice retries...');
+    return forEachActiveTenant(async (tenantId) => {
+      let tenantFallback;
+      try {
+        tenantFallback = await TenantModel.findById(tenantId);
+      } catch { tenantFallback = { name: 'Your Business', address: '', phone: '' }; }
+
+      const salonName = await SettingsModel.getString('salon_name', tenantFallback?.name || 'Your Business', tenantId);
+      const salonAddress = await SettingsModel.getString('salon_address', tenantFallback?.address || '', tenantId);
+      const salonPhone = await SettingsModel.getString('salon_phone', tenantFallback?.phone || '', tenantId);
+      const salonGstin = await SettingsModel.getString('salon_gstin', '', tenantId);
+      const salonLogo = await SettingsModel.getString('salon_logo', '', tenantId);
+
+      const unsent = await InvoiceModel.findUnsent(tenantId, { limit: 30, maxAgeHours: 168 });
+      if (!unsent.length) return { sent: 0, failed: 0, skipped: 0 };
+
+      const svc = getWhatsAppService(tenantId);
+      await svc.initialize();
+      if (!svc.getStatus().isConnected) {
+        let waited = 0;
+        while (!svc.getStatus().isConnected && waited < 15000) {
+          await new Promise((r) => setTimeout(r, 500));
+          waited += 500;
+        }
+      }
+      if (!svc.getStatus().isConnected) {
+        console.log(`[Cron][Invoice] Tenant ${tenantId}: WhatsApp still not connected, skipping ${unsent.length} invoices`);
+        return { sent: 0, failed: unsent.length, skipped: 0 };
+      }
+
+      let sent = 0, failed = 0, skipped = 0;
+
+      for (const invoice of unsent) {
+        const invoiceNo = String(invoice.invoice_number).padStart(4, '0');
+        const customerName = invoice.customer_name || 'Valued Customer';
+        const phone = invoice.customer_phone;
+        if (!phone) { skipped++; continue; }
+
+        let tmpPdfPath = null;
+        try {
+          const pdfBuffer = await generateInvoicePdf(invoice, salonName, salonAddress, salonPhone, salonGstin, salonLogo);
+          tmpPdfPath = path.join(os.tmpdir(), `invoice-auto-${invoice.invoice_number}-${Date.now()}.pdf`);
+          fs.writeFileSync(tmpPdfPath, pdfBuffer);
+
+          const caption = `Hello ${customerName}! 🙏\n\nPlease find your invoice *#${invoiceNo}* from *${salonName}* attached.\n\n*Total: ₹${Number(invoice.total).toFixed(2)}*\n\nThank you for visiting us! 🌟`;
+          const filename = `Invoice-${invoiceNo}.pdf`;
+
+          await svc.sendDocument(phone, tmpPdfPath, filename, caption);
+          console.log(`[Cron][Invoice] Sent invoice #${invoiceNo} to ${phone}`);
+
+          await MessageLogModel.create({
+            tenant_id: tenantId,
+            customer_id: invoice.customer_id || null,
+            phone,
+            message: caption,
+            type: 'invoice',
+            status: 'sent',
+          });
+          await InvoiceModel.markWhatsAppSent(invoice.id, tenantId);
+          sent++;
+        } catch (err) {
+          console.warn(`[Cron][Invoice] Failed invoice #${invoiceNo}:`, err.message);
+          await MessageLogModel.create({
+            tenant_id: tenantId,
+            customer_id: invoice.customer_id || null,
+            phone,
+            message: `Invoice #${invoiceNo} retry failed`,
+            type: 'invoice',
+            status: 'failed',
+            error_message: String(err.message || err),
+          }).catch(() => {});
+          failed++;
+        } finally {
+          if (tmpPdfPath) { try { fs.unlinkSync(tmpPdfPath); } catch { /* ignore */ } }
+        }
+
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+
+      return { sent, failed, skipped };
     });
   },
 };

@@ -57,6 +57,25 @@ export const InvoiceModel = {
     return data;
   },
 
+  async findUnsent(tenantId, { limit = 50, maxAgeHours = 72 } = {}) {
+    if (!tenantId) throw new AppError('Tenant context required', 401);
+    let query = supabase
+      .from(TABLE)
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .eq('whatsapp_sent', false)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (maxAgeHours && maxAgeHours > 0) {
+      const cutoff = new Date();
+      cutoff.setHours(cutoff.getHours() - maxAgeHours);
+      query = query.gte('created_at', cutoff.toISOString());
+    }
+    const { data, error } = await query;
+    if (error) throw new AppError('Failed to fetch unsent invoices', 500);
+    return data || [];
+  },
+
   async getReport({ tenantId, filter = 'month', start, end } = {}) {
     if (!tenantId) throw new AppError('Tenant context required', 401);
     let query = supabase.from(TABLE).select(`

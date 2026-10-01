@@ -8,22 +8,31 @@ export const login = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     message: 'Login successful',
-    data: result,
+    authMode: 'legacy',
+    signupRequired: false,
+    data: {
+      token: result.token,
+      admin: result.admin,
+      tenant: result.tenant,
+      subscription: result.subscription,
+    },
   });
 });
 
 export const getProfile = asyncHandler(async (req, res) => {
-  const admin = await AuthService.getProfile(req.admin.id);
-
   res.json({
     success: true,
-    data: admin,
+    data: req.admin,
   });
 });
 
 export const verifyToken = asyncHandler(async (req, res) => {
   res.json({
     success: true,
-    data: req.admin,
+    data: {
+      admin: req.admin,
+      tenant: req.tenant,
+      subscription: req.subscription,
+    },
   });
 });

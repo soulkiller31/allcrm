@@ -1,10 +1,9 @@
 import { Router } from 'express';
 import * as serviceController from '../controllers/serviceController.js';
-import { authenticateTenant, requireSubscription } from '../middleware/tenant.js';
+import { authenticateTenant } from '../middleware/tenant.js';
 
 const router = Router();
 router.use(authenticateTenant);
-router.use(requireSubscription);
 
 router.get('/categories', serviceController.getCategories);
 router.get('/', serviceController.getServices);

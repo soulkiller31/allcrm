@@ -1,28 +1,26 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, MessageSquare, FileText, Smartphone,
-  LogOut, Menu, X, Scissors, Receipt, Settings as SettingsIcon, CreditCard,
+  LogOut, Menu, X, Scissors, Receipt, Settings as SettingsIcon,
   Sun, Moon,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import TrialBanner from './TrialBanner';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/customers', icon: Users, label: 'Customers' },
   { to: '/invoice', icon: Receipt, label: 'Invoice' },
-  { to: '/services', icon: SettingsIcon, label: 'Services' },
+  { to: '/services', icon: Scissors, label: 'Services' },
   { to: '/whatsapp', icon: Smartphone, label: 'WhatsApp' },
   { to: '/templates', icon: FileText, label: 'Templates' },
   { to: '/message-logs', icon: MessageSquare, label: 'Message Logs' },
-  { to: '/billing', icon: CreditCard, label: 'Billing' },
   { to: '/settings', icon: SettingsIcon, label: 'Settings' },
 ];
 
 export default function Layout({ children }) {
-  const { admin, tenant, logout, daysLeft, subscription } = useAuth();
+  const { admin, tenant, logout } = useAuth();
   const { toggleTheme, isDark } = useTheme();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -69,9 +67,6 @@ export default function Layout({ children }) {
             }>
             <Icon size={18} />
             {label}
-            {label === 'Billing' && subscription?.status === 'trial' && daysLeft <= 3 && (
-              <span className="ml-auto text-xs bg-red-500 text-white px-1.5 py-0.5 rounded-full">{daysLeft}d</span>
-            )}
           </NavLink>
         ))}
       </nav>
@@ -105,8 +100,6 @@ export default function Layout({ children }) {
       )}
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <TrialBanner />
-
         <header className="lg:hidden flex items-center justify-between px-4 py-3 bg-surface-elevated border-b border-surface-border">
           <button onClick={() => setSidebarOpen(true)} className="p-2 rounded-xl hover:bg-surface-soft text-ink-muted">
             <Menu size={20} />

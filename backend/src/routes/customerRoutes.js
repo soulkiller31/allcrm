@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import * as customerController from '../controllers/customerController.js';
-import { authenticate, requireSubscription } from '../middleware/tenant.js';
+import { authenticate } from '../middleware/tenant.js';
 import { validate } from '../middleware/validate.js';
 import { customerValidation } from '../validators/index.js';
 import { AppError } from '../middleware/errorHandler.js';
@@ -34,7 +34,6 @@ const handleUpload = (req, res, next) => {
 };
 
 router.use(authenticate);
-router.use(requireSubscription);
 
 router.get('/stats', customerController.getCustomerStats);
 router.get('/export', customerController.exportCustomers);

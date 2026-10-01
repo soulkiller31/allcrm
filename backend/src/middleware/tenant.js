@@ -1,86 +1,58 @@
 import jwt from 'jsonwebtoken';
 import config from '../config/index.js';
 import { AppError } from './errorHandler.js';
-import { TenantModel } from '../models/Tenant.js';
-import { SubscriptionModel } from '../models/Subscription.js';
-import { AdminModel } from '../models/Admin.js';
-import { verifyIdToken } from '../config/firebase.js';
+import pg from 'pg';
 
-const buildAdminPayload = (admin, tenant) => ({
-  id: admin.id,
-  email: admin.email,
-  name: admin.name,
-  tenantId: tenant.id,
-});
+let _cache = null;
+let _cacheAt = 0;
+const CACHE_TTL = 60_000;
 
-const resolveTenantAndAdmin = async (firebaseUid, emailFromToken) => {
-  let tenant = null;
-  if (firebaseUid) {
-    tenant = await TenantModel.findByFirebaseUid(firebaseUid);
-  }
-  if (!tenant && emailFromToken) {
-    tenant = await TenantModel.findByEmail(emailFromToken);
-  }
-  if (!tenant) return null;
-
-  let admin = await AdminModel.findByTenantId(tenant.id);
-  if (!admin && emailFromToken) {
-    admin = await AdminModel.findByEmail(emailFromToken);
-  }
-  if (!admin) return null;
-
-  return { tenant, admin };
-};
-
-const authenticateWithFirebase = async (token) => {
+async function getDefaultBusiness() {
+  const now = Date.now();
+  if (_cache && now - _cacheAt < CACHE_TTL) return _cache;
   try {
-    const decoded = await verifyIdToken(token);
-    const firebaseUid = decoded.uid;
-    const email = decoded.email;
-    const name = decoded.name || '';
-
-    const resolved = await resolveTenantAndAdmin(firebaseUid, email);
-    if (!resolved) {
-      return { type: 'signup_required', firebaseUid, email, name };
-    }
-
-    const { tenant, admin } = resolved;
-    if (!tenant.is_active) throw new AppError('Account disabled.', 401);
-
-    if (!tenant.firebase_uid && firebaseUid) {
-      try { await TenantModel.update(tenant.id, { firebase_uid: firebaseUid }); }
-      catch (_e) { /* ignore */ }
-    }
-    if (!admin.firebase_uid && firebaseUid) {
-      try {
-        const { default: supabase } = await import('../config/supabase.js');
-        await supabase.from('admins').update({ firebase_uid: firebaseUid }).eq('id', admin.id);
-      } catch (_e) { /* ignore */ }
-    }
-
-    const subscription = await SubscriptionModel.findByTenantId(tenant.id);
-    return {
-      type: 'ok',
-      admin: buildAdminPayload({ ...admin, name: admin.name || name }, tenant),
-      tenant,
-      subscription,
-    };
-  } catch (err) {
-    if (err instanceof AppError) throw err;
-    return { type: 'invalid', error: err };
+    const client = new pg.Client({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+    });
+    await client.connect();
+    const t = await client.query(`
+      SELECT t.*,
+        (SELECT row_to_json(a) FROM (
+          SELECT id, email, name, tenant_id, firebase_uid FROM admins WHERE tenant_id = t.id OR email = t.owner_email LIMIT 1
+        ) a) AS admin,
+        (SELECT row_to_json(s) FROM (
+          SELECT * FROM subscriptions WHERE tenant_id = t.id ORDER BY created_at DESC LIMIT 1
+        ) s) AS subscription
+      FROM tenants t ORDER BY t.created_at ASC LIMIT 1
+    `);
+    await client.end();
+    if (t.rows.length === 0) throw new Error('No tenant row in DB');
+    const row = t.rows[0];
+    _cache = { tenant: row, admin: row.admin, subscription: row.subscription };
+    _cacheAt = now;
+    return _cache;
+  } catch (e) {
+    console.warn('[tenant] getDefaultBusiness failed:', e.message);
+    if (_cache) return _cache;
+    throw e;
   }
-};
+}
 
-const authenticateWithLegacyJwt = (token) => {
-  let decoded;
-  try {
-    decoded = jwt.verify(token, config.jwt.secret);
-  } catch (err) {
-    if (err.name === 'TokenExpiredError') throw new AppError('Token expired. Please login again.', 401);
-    return { type: 'invalid' };
-  }
-  return { type: 'jwt', decoded };
-};
+function daysLeft(s) {
+  if (!s) return 0;
+  const now = new Date();
+  if (s.status === 'trial' && s.trial_ends_at) return Math.max(0, Math.ceil((new Date(s.trial_ends_at) - now) / 86400000));
+  if (s.status === 'active' && s.paid_until) return Math.max(0, Math.ceil((new Date(s.paid_until) - now) / 86400000));
+  return 0;
+}
+function isActive(s) {
+  if (!s) return true;
+  const now = new Date();
+  if (s.status === 'trial') return s.trial_ends_at && new Date(s.trial_ends_at) > now;
+  if (s.status === 'active') return s.paid_until && new Date(s.paid_until) > now;
+  return false;
+}
 
 export const authenticateTenant = async (req, res, next) => {
   try {
@@ -88,87 +60,73 @@ export const authenticateTenant = async (req, res, next) => {
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       throw new AppError('Access denied. No token provided.', 401);
     }
-
     const token = authHeader.split(' ')[1];
-    let admin = null;
-    let tenant = null;
-    let subscription = null;
-
-    const firebaseEnabled = !!config.firebase.projectId;
-
-    // A Firebase ID token is always a JWT whose header encodes { alg: "RS256" }.
-    // Our own legacy JWTs use HS256. We detect Firebase tokens by decoding the
-    // header without verification so we know which path owns this token.
-    const looksLikeFirebaseToken = (() => {
-      try {
-        const header = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString());
-        return header.alg === 'RS256';
-      } catch {
-        return false;
-      }
-    })();
-
-    if (firebaseEnabled && looksLikeFirebaseToken) {
-      // Only attempt Firebase verification if the token header is RS256.
-      // Backend JWTs (HS256) must never be sent to verifyIdToken.
-      const fbResult = await authenticateWithFirebase(token);
-      if (fbResult.type === 'ok') {
-        admin = fbResult.admin;
-        tenant = fbResult.tenant;
-        subscription = fbResult.subscription;
-      } else if (fbResult.type === 'signup_required') {
-        throw new AppError(
-          'Account not registered. Please complete signup first.',
-          403
-        );
-      } else if (fbResult.type === 'invalid') {
-        const reason = fbResult.error?.message || 'Firebase token verification failed';
-        throw new AppError(`Authentication failed: ${reason}`, 401);
-      } else {
-        throw fbResult.error || new AppError('Authentication failed.', 401);
-      }
+    let decoded;
+    try {
+      decoded = jwt.verify(token, config.jwt.secret);
+    } catch (err) {
+      if (err.name === 'TokenExpiredError') throw new AppError('Token expired. Please login again.', 401);
+      throw new AppError('Invalid token.', 401);
     }
+    if (!decoded) throw new AppError('Invalid token.', 401);
 
-    if (!admin) {
-      const legacy = authenticateWithLegacyJwt(token);
-      if (legacy.type !== 'jwt') {
-        throw new AppError('Invalid token.', 401);
-      }
-      const decoded = legacy.decoded;
-      if (!decoded.tenantId) {
-        throw new AppError('Invalid token: missing tenant context. Please login again.', 401);
-      }
-      tenant = await TenantModel.findById(decoded.tenantId);
-      if (!tenant || !tenant.is_active) throw new AppError('Account not found or disabled.', 401);
-      subscription = await SubscriptionModel.findByTenantId(tenant.id);
-      admin = { id: decoded.id, email: decoded.email, name: decoded.name, tenantId: tenant.id };
-    }
+    const data = await getDefaultBusiness();
+    const tenant = data.tenant;
+    const admin = data.admin || { id: decoded.id, email: decoded.email, name: decoded.name, tenant_id: tenant.id };
+    const sub = data.subscription;
+    const plan = sub?.plan || 'trial';
 
-    req.admin = admin;
-    req.tenant = tenant;
-    req.subscription = subscription;
+    req.admin = {
+      id: admin.id || decoded.id,
+      email: admin.email || decoded.email,
+      name: admin.name || decoded.name,
+      tenantId: tenant.id,
+      tenant_id: tenant.id,
+      firebase_uid: admin.firebase_uid,
+    };
+
+    req.tenant = {
+      id: tenant.id,
+      name: tenant.name,
+      businessType: tenant.business_type,
+      business_type: tenant.business_type,
+      ownerEmail: tenant.owner_email,
+      ownerName: tenant.owner_name,
+      phone: tenant.phone || '',
+      address: tenant.address || '',
+      gstin: tenant.gstin || '',
+      logoUrl: tenant.logo_url || '',
+      is_active: tenant.is_active !== false,
+      firebase_uid: tenant.firebase_uid,
+    };
+
+    req.subscription = {
+      id: sub?.id,
+      tenantId: tenant.id,
+      tenant_id: tenant.id,
+      plan: decoded.plan || plan,
+      status: sub?.status || 'trial',
+      trial_ends_at: sub?.trial_ends_at,
+      trialEndsAt: sub?.trial_ends_at,
+      paid_from: sub?.paid_from,
+      paid_until: sub?.paid_until,
+      paidUntil: sub?.paid_until,
+      cashfree_order_id: sub?.cashfree_order_id,
+      cashfree_payment_id: sub?.cashfree_payment_id,
+      amount_paid: sub?.amount_paid,
+      daysLeft: daysLeft(sub),
+      isActive: isActive(sub),
+      is_active: isActive(sub),
+    };
+
     next();
   } catch (err) {
     next(err);
   }
 };
 
-// Checks that tenant has an active trial or paid subscription
-export const requireSubscription = async (req, res, next) => {
-  try {
-    if (!req.tenant) {
-      return next(new AppError('Tenant context required', 401));
-    }
-
-    const { subscription } = req;
-    if (!subscription || !SubscriptionModel.isActive(subscription)) {
-      return next(new AppError('Subscription expired. Please renew your plan.', 402));
-    }
-    next();
-  } catch (err) {
-    next(err);
-  }
+export const requireSubscription = async (_req, _res, next) => {
+  next();
 };
 
-// Backward-compat alias so existing routes using authenticate still work
 export const authenticate = authenticateTenant;

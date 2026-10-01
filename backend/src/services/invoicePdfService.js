@@ -2,6 +2,7 @@ import puppeteer from 'puppeteer';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { getPuppeteerExecutable } from './whatsappService.js';
 
 /**
  * Builds the full HTML string for the Cut N Culture invoice.
@@ -216,7 +217,7 @@ function buildInvoiceHtml(invoice, salonName, salonAddress, salonPhone, salonGst
 export async function generateInvoicePdf(invoice, salonName, salonAddress, salonPhone, salonGstin, logoUrl) {
   const html = buildInvoiceHtml(invoice, salonName, salonAddress, salonPhone, salonGstin, logoUrl);
 
-  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  const executablePath = getPuppeteerExecutable();
 
   // Create a unique temp dir for this Chrome instance so it never
   // conflicts with the WhatsApp Chrome profile lock.
@@ -238,7 +239,7 @@ export async function generateInvoicePdf(invoice, salonName, salonAddress, salon
     ],
   };
 
-  if (executablePath && fs.existsSync(executablePath)) {
+  if (executablePath) {
     launchOptions.executablePath = executablePath;
   }
 

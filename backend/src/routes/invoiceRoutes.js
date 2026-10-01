@@ -1,13 +1,12 @@
 import { Router } from 'express';
 import * as invoiceController from '../controllers/invoiceController.js';
-import { authenticate, requireSubscription } from '../middleware/tenant.js';
+import { authenticate } from '../middleware/tenant.js';
 import { validate } from '../middleware/validate.js';
 import { invoiceSaveValidation } from '../validators/index.js';
 
 const router = Router();
 
 router.use(authenticate);
-router.use(requireSubscription);
 
 router.get('/next-number', invoiceController.getNextInvoiceNumber);
 router.get('/', invoiceController.getInvoices);
