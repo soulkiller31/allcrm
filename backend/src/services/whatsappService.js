@@ -144,6 +144,15 @@ class WhatsAppService {
       fs.mkdirSync(sessionPath, { recursive: true });
     }
 
+    // Auto-clean stale Chrome lock files from previous crashed sessions
+    const sessionDataPath = path.join(sessionPath, `session-tenant-${this.tenantId}`);
+    ['lockfile', 'SingletonLock', 'SingletonSocket', 'SingletonCookie'].forEach(f => {
+      try {
+        const p = path.join(sessionDataPath, f);
+        if (fs.existsSync(p)) { fs.rmSync(p, { force: true }); console.log(`[WhatsApp][${this.tenantId}] Removed stale lock: ${f}`); }
+      } catch { /* ignore */ }
+    });
+
     const executablePath = getPuppeteerExecutable();
     console.log(
       `[WhatsApp][${this.tenantId}] Initializing client.` +
@@ -407,10 +416,12 @@ class WhatsAppService {
     const normalized = normalizePhone(phone);
     const fallbackChatId = formatPhoneForWhatsApp(phone);
     let chatId = fallbackChatId;
+    console.log(`[WhatsApp][${this.tenantId}] Phone: ${phone} → normalized: ${normalized} → fallbackChatId: ${fallbackChatId}`);
     try {
       const resolved = await this.client.getNumberId(normalized);
       const ser = typeof resolved === 'string' ? resolved : (resolved?._serialized || resolved?.id?._serialized || resolved?.user ? `${resolved.user}@${resolved.server || 'c.us'}` : null);
       if (ser && /@/.test(String(ser))) chatId = String(ser);
+      console.log(`[WhatsApp][${this.tenantId}] getNumberId resolved: ${ser} → using chatId: ${chatId}`);
     } catch (err) {
       console.warn(`[WhatsApp][${this.tenantId}] getNumberId skipped for +${normalized}:`, String(err.message || err).slice(0, 160));
     }
@@ -419,7 +430,9 @@ class WhatsAppService {
     let lastErr = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
+        console.log(`[WhatsApp][${this.tenantId}] Sending to chatId: ${chatId}, attempt ${attempt}`);
         const result = await this.client.sendMessage(chatId, message);
+        console.log(`[WhatsApp][${this.tenantId}] Send SUCCESS to ${chatId}, msgId:`, result?.id?._serialized || result?.id || 'no-id');
         return result;
       } catch (err) {
         lastErr = err;
