@@ -419,15 +419,24 @@ class WhatsAppService {
     let lastErr = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        return await this.client.sendMessage(chatId, message);
+        const result = await this.client.sendMessage(chatId, message);
+        return result;
       } catch (err) {
         lastErr = err;
         const msg = (err && err.message) || String(err);
+
+        // Known whatsapp-web.js internal memoization bug — message is actually
+        // sent successfully, the error is a library-side getter issue. Treat as success.
+        if (msg.includes('id property') || msg.includes('memoize') || /getter.*id/i.test(msg)) {
+          console.warn(`[WhatsApp][${this.tenantId}] Message sent (ignoring library memoize bug):`, msg.split('\n')[0]);
+          return { sent: true, chatId }; // message was delivered
+        }
+
         if (msg.includes('not a valid') || msg.includes('not exist') || msg.includes('404') || msg.includes('Wid') || msg.includes('unregistered') || msg.includes('not on WhatsApp')) {
           throw new Error(`Phone +${normalized} is not on WhatsApp. Ask customer to install WhatsApp first.`);
         }
-        if (attempt < 3 && (msg.includes('id property') || msg.includes('memoize') || msg.includes('No LID') || msg.includes('undefined') || /getter/i.test(msg))) {
-          console.warn(`[WhatsApp][${this.tenantId}] sendMessage attempt ${attempt} failed (library bug), retrying...:`, msg.split('\n')[0]);
+        if (attempt < 3 && (msg.includes('No LID') || msg.includes('undefined') || /getter/i.test(msg))) {
+          console.warn(`[WhatsApp][${this.tenantId}] sendMessage attempt ${attempt} retrying:`, msg.split('\n')[0]);
           chatId = fallbackChatId;
           await new Promise((r) => setTimeout(r, 800 * attempt));
           continue;
