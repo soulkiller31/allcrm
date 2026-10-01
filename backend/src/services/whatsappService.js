@@ -425,31 +425,32 @@ class WhatsAppService {
         lastErr = err;
         const msg = (err && err.message) || String(err);
 
-        // Known whatsapp-web.js internal memoization bug — message is actually
-        // sent successfully, the error is a library-side getter issue. Treat as success.
-        if (msg.includes('id property') || msg.includes('memoize') || /getter.*id/i.test(msg)) {
-          console.warn(`[WhatsApp][${this.tenantId}] Message sent (ignoring library memoize bug):`, msg.split('\n')[0]);
-          return { sent: true, chatId };
-        }
-
         // Detached Frame — browser page crashed, need to reconnect
         if (msg.includes('detached') || msg.includes('Detached') || msg.includes('Frame')) {
-          console.warn(`[WhatsApp][${this.tenantId}] Detached frame detected — reconnecting...`);
+          console.warn(`[WhatsApp][${this.tenantId}] Detached frame — reconnecting...`);
           this.status = 'disconnected';
           this.client = null;
           this.initializing = false;
-          // Schedule reconnect and throw so caller knows to retry later
           this.scheduleReconnect('detached_frame');
-          throw new Error('WhatsApp disconnected due to a browser issue. Please wait 30 seconds and try again — it will reconnect automatically.');
+          throw new Error('WhatsApp disconnected. Please wait 30 seconds and try again.');
+        }
+
+        // Memoize/id bug — session is corrupt, needs re-login
+        if (msg.includes('id property') || msg.includes('memoize') || /getter.*id/i.test(msg)) {
+          console.error(`[WhatsApp][${this.tenantId}] Session corrupt (memoize bug) — forcing reconnect`);
+          this.status = 'disconnected';
+          this.client = null;
+          this.initializing = false;
+          this.scheduleReconnect('session_corrupt');
+          throw new Error('WhatsApp session expired. Please go to WhatsApp settings, click Logout, then scan QR code again.');
         }
 
         if (msg.includes('not a valid') || msg.includes('not exist') || msg.includes('404') || msg.includes('Wid') || msg.includes('unregistered') || msg.includes('not on WhatsApp')) {
           throw new Error(`Phone +${normalized} is not on WhatsApp. Ask customer to install WhatsApp first.`);
         }
 
-        if (attempt < 3 && (msg.includes('No LID') || msg.includes('undefined') || /getter/i.test(msg))) {
-          console.warn(`[WhatsApp][${this.tenantId}] sendMessage attempt ${attempt} retrying:`, msg.split('\n')[0]);
-          chatId = fallbackChatId;
+        if (attempt < 3) {
+          console.warn(`[WhatsApp][${this.tenantId}] sendMessage attempt ${attempt} failed, retrying:`, msg.split('\n')[0]);
           await new Promise((r) => setTimeout(r, 800 * attempt));
           continue;
         }
@@ -523,11 +524,14 @@ class WhatsAppService {
           await new Promise((r) => setTimeout(r, 1000 * attempt));
           continue;
         }
-        // On final attempt, if it's the memoize/id bug the document was actually
-        // sent — treat as success so the invoice is still marked as sent.
+        // Memoize/id bug — session is corrupt, force reconnect
         if (retryable && (msg.includes('id property') || msg.includes('memoize') || /getter.*id/i.test(msg))) {
-          console.warn(`[WhatsApp][${this.tenantId}] Document sent (ignoring library memoize bug):`, msg.split('\n')[0]);
-          return { sent: true, chatId };
+          console.error(`[WhatsApp][${this.tenantId}] Session corrupt (memoize) — forcing reconnect`);
+          this.status = 'disconnected';
+          this.client = null;
+          this.initializing = false;
+          this.scheduleReconnect('session_corrupt');
+          throw new Error('WhatsApp session expired. Please go to WhatsApp settings, click Logout, then scan QR code again.');
         }
         throw err;
       }
